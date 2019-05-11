@@ -1,6 +1,6 @@
 # subsystem
 
-Subsystem is a tooling that to convientently allow to run and maintain multiple root filesystems on a single linux machine. On the contrary to usual container such as Docker or LXC, subsystem does not isolate the different filesystems. Instead it only implements the abstraction that is neccessary to have multiple root filesystem. In particular, subsystems uses mount namespaces to  create containers for the additional root filesystem. These containers then have a differnt root filesystem than the host system. 
+subsystem is a tooling that to convientently allow to run and maintain multiple root filesystems on a single linux machine. On the contrary to usual container such as Docker or LXC, subsystem does not isolate the different filesystems. Instead it only implements the abstraction that is neccessary to have multiple root filesystem. In particular, subsystems uses mount namespaces to  create containers for the additional root filesystem. These containers then have a differnt root filesystem than the host system. 
 
 To conviniently execute binaries of a subsystem, the host root filesystem is exended by links to a program that automatically changes into the appropriate mount namespace. The listing below shows how the program `id` can be executed:
 ```
@@ -29,11 +29,14 @@ Executing /usr/bin/pacman in blackarch
 ...
 ```
 
-## Build Instructions
+## Build Instructions & Binaries
 Subsystem can be built using the provided CMakeLists.txt. The build process generates two binaries 
 
-* subsystem
-* subsystemExecutor
+* subsystem: Initializes the mount namespaces:
+	* To initialize the containers: `sudo subsystem start`
+	* To stop containers: `sudo subsystem stop`
+	* To recreate links (e.g. after installtion of additional binaries): `sudo subsystem relink`
+* subsystemExecutor: Executes applications inside the contained (usually does not have to be  manually invoked)
 
 The subsystemExecutor binary is designed to be a root owned setuid binary. This is because in order to enter the mount namespaces of the container  requires the CAP_SYS_ADMIN capability. The subsystemExecutor wil, however, drop back to the crendentials of the user after the mount namespace has been entered.
 
@@ -91,4 +94,53 @@ $ cd arch
 $ wget https://images.linuxcontainers.org/images/archlinux/current/amd64/default/<BUILDTIME>/rootfs.tar.xz
 $ unxz rootfs.tar.xz
 $ sudo tar xvf rootfs.tar
+```
+
+## Default Mounts
+The following directories are mounted by default into all containers:
+
+* /dev
+Within /dev the following virtual filesystem are mounted:
+	* /dev/pts
+	* /dev/shm
+	* dev/mqueue
+	* dev/hugepages
+* /run
+
+## Usage Example:
+#### 1 Download and extract root filesystem
+
+```
+$ cd /opt/
+$ mkdir subsystems
+$ cd subsystems
+$ mkdir arch
+$ cd arch
+$ wget https://images.linuxcontainers.org/images/archlinux/current/amd64/default/<BUILDTIME>/rootfs.tar.xz
+$ unxz rootfs.tar.xz
+$ sudo tar xvf rootfs.tar
+```
+#### 2 Add Entry to config file (default /etc/subsys.conf):
+```
+[arch]
+path=/opt/subsystems/arch
+mnt=/etc/passwd;/etc/shadow;/etc/group;/etc/resolv.conf;/etc/sudoers;/home/;/proc/
+bins=/usr/bin
+```
+
+#### 3 Setup container
+```
+$ sudo subsystem start
+```
+If subsystem is already setup it needs to be stopped and than started again
+
+#### 4 Install additional application into container
+```
+$ sudo arch:pacman -Sy && sudo arch:pacman -S <paket-name>
+$ sudo subsystem relink
+```
+
+#### 5 Use application:
+```
+$ arch:<binary-name> [args...]
 ```
