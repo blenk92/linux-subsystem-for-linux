@@ -1,0 +1,14 @@
+#pragma once
+
+#cmakedefine MNTDIR "@MNTDIR@"
+#cmakedefine LINKSDIR "@LINKSDIR@"
+#cmakedefine EXECUTORPATH "@EXECUTORPATH@"
+#cmakedefine CONFIGPATH "@CONFIGPATH@"
+
+#include <filesystem>
+namespace fs = std::filesystem;
+
+fs::path nsMntDir(MNTDIR);
+fs::path linksDir(LINKSDIR);
+fs::path executorPath(EXECUTORPATH);
+fs::path config(CONFIGPATH);
