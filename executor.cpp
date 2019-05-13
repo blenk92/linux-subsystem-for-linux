@@ -63,6 +63,10 @@ int main (int argc, char** argv) {
     bpt::ptree pt;
     bpt::ini_parser::read_ini(config, pt);
 
+    char* cwd_cstr = get_current_dir_name();
+    fs::path cwd(cwd_cstr + 1);
+    free(cwd_cstr);
+
     // Enter mount namepsace of the container
     int fd = open(containerPath.c_str(), O_RDONLY);
     if (fd == -1) {
@@ -126,5 +130,9 @@ int main (int argc, char** argv) {
         setenv("PATH",(*envPath).c_str(), 1);
     }
 
+    // set cwd to current directory
+    if (chdir(("/oldRoot" / cwd).c_str()) != 0) {
+        std::cout << "Warning: Could not change working directory" << std::endl;
+    }
     execv(binary.c_str(), args);
 }
