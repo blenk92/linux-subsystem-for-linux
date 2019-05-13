@@ -148,7 +148,6 @@ int main(int argc, char** argv) {
             return 1;
         }
 
-        fs::path config("/home/max/subsys.conf");
         if (!fs::exists(config) || !fs::is_regular_file(config)) {
             std::cerr << "Couldn't find config file at " << config << ". Exiting..." << std::endl;
             return 1;
@@ -273,9 +272,11 @@ int main(int argc, char** argv) {
 
                     // Fix permissions of the /run mount
                     for (auto & p : fs::directory_iterator("/run/user")) {
-                        uid_t uid = std::stoi(p.path().filename().string());
-                        gid_t gid = std::stoi(p.path().filename().string());
-                        chown(p.path().c_str(), uid, gid);
+                        fs::path userPath = subsystem.path / "run/user" / p.path().filename();
+                        if(mount(p.path().c_str(), userPath.c_str(), 0, MS_BIND, 0) != 0) {
+                            std::cout << "Could not bind mount " << p << " onto " << userPath << std::endl;
+                            return 1;
+                        }
                     }
 
                     // Mount additional virtual filesystem within the /dev directory

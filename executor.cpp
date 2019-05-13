@@ -59,6 +59,10 @@ int main (int argc, char** argv) {
         return 1;
     }
 
+    // Parse config file before entering mount namespace
+    bpt::ptree pt;
+    bpt::ini_parser::read_ini(config, pt);
+
     // Enter mount namepsace of the container
     int fd = open(containerPath.c_str(), O_RDONLY);
     if (fd == -1) {
@@ -81,8 +85,6 @@ int main (int argc, char** argv) {
         return 1;
     }
 
-    bpt::ptree pt;
-    bpt::ini_parser::read_ini(config, pt);
 
     // Parse config file to get paths to search the binary in if the path is not an absolute path
     if (!ba::starts_with(binary, "/")) {
