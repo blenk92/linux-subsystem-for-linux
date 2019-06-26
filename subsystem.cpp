@@ -79,6 +79,14 @@ inline bool createFile(const fs::path& path) {
 }
 
 /**
+ * C++ wrapper for mount system call.
+ * @return true if mount was successfull, false otherwise.
+ */
+inline bool mountWrapper(const fs::path& source, const fs::path& target, const char* filesystemtype, unsigned long mountflags, const void* data) {
+    return mount(source.c_str(), target.c_str(), filesystemtype, mountflags, data) == 0;
+}
+
+/**
  * Binds the mount namespace of the parent process to nsMntDir/<container-name>
  * (default /tmp/subsys/<container-name>)
  * @param data (std::string*) name of the container
@@ -100,7 +108,7 @@ int childBindMountNamespace(void* data) {
 
     // Wait until mount namespace is entered by parent
     mtx.lock();
-    if (mount(mntNs.c_str(), nsMntPath.c_str(), 0, MS_BIND, 0) != 0) {
+    if (!mountWrapper(mntNs, nsMntPath, 0, MS_BIND, 0)) {
         std::cerr << "Couldn't create bind mount for mount namespace of " << *container << ": " << strerror(errno) << std::endl;
         return 1;
     }
@@ -207,12 +215,12 @@ int main(int argc, char** argv) {
 
             // Create mount directory if not existing
             if (!fs::exists(nsMntDir)) {
-                if (!fs::create_directory(nsMntDir) || mount(nsMntDir.c_str(), nsMntDir.c_str(), 0, MS_BIND|MS_REC, 0) != 0) {
+                if (!fs::create_directory(nsMntDir) || !mountWrapper(nsMntDir, nsMntDir, 0, MS_BIND|MS_REC, 0)) {
                     std::cerr << "Couldn't create tmp directory at " << nsMntDir << std::endl;
                     return 1;
                 }
             }
-            if (mount("", nsMntDir.c_str(), 0, MS_PRIVATE, 0) != 0) {
+            if (!mountWrapper("", nsMntDir, 0, MS_PRIVATE, 0)) {
                 std::cerr << "Couldn't make tmp directory at " << nsMntDir << " private." << std::endl;
             }
 
@@ -237,13 +245,13 @@ int main(int argc, char** argv) {
                     delete[] stk;
 
                     // Configure all mount points of the new mount namespace as slaves to not propagate the following mounts
-                    if (mount("", "/", 0, MS_SLAVE | MS_REC, 0) != 0) {
+                    if (!mountWrapper("", "/", 0, MS_SLAVE | MS_REC, 0)) {
                         std::cerr << "Couldn't set root mount as slave" << std::endl;
                         return 1;
                     }
 
                     // Bind mount the directory containing the new root filesystem to itself to enable usage of pivot_root
-                    if (mount(subsystem.path.c_str(), subsystem.path.c_str(), 0, MS_BIND, 0) != 0) {
+                    if (!mountWrapper(subsystem.path, subsystem.path, 0, MS_BIND, 0)) {
                         std::cerr << "Couldn't bind mount new root" << std::endl;
                         return 1;
                     }
@@ -264,7 +272,7 @@ int main(int argc, char** argv) {
                                 createFile(mntPoint);
                             }
                         }
-                        if (mount(mnt.first.c_str(), mntPoint.c_str(), 0, MS_BIND, 0) != 0) {
+                        if (!mountWrapper(mnt.first, mntPoint, 0, MS_BIND, 0)) {
                             std::cerr << "Failed to bind mount " << mnt.first << " into " << subsystem.name
                                       << std::endl;
                         }
@@ -273,29 +281,41 @@ int main(int argc, char** argv) {
                     // Fix permissions of the /run mount
                     for (auto & p : fs::directory_iterator("/run/user")) {
                         fs::path userPath = subsystem.path / "run/user" / p.path().filename();
-                        if(mount(p.path().c_str(), userPath.c_str(), 0, MS_BIND, 0) != 0) {
+                        if(!mountWrapper(p.path(), userPath, 0, MS_BIND, 0)) {
                             std::cout << "Could not bind mount " << p << " onto " << userPath << std::endl;
                             return 1;
                         }
                     }
 
+                    // Mount procfs
+                    if (!mountWrapper("", (subsystem.path / "proc"), "proc", 0, 0)){
+                        std::cout << "Couldn't mount procfs" << std::endl;
+                        return 1;
+                    }
+
+                    // Mount sysfs
+                    if (!mountWrapper("", (subsystem.path / "sys"), "sysfs", 0, 0)){
+                        std::cout << "Couldn't mount sysfs" << std::endl;
+                        return 1;
+                    }
+
                     // Mount additional virtual filesystem within the /dev directory
-                    if (mount("", (subsystem.path / "dev/pts").c_str(), "devpts", 0, 0) != 0) {
+                    if (!mountWrapper("", (subsystem.path / "dev/pts"), "devpts", 0, 0)) {
                         std::cout << "Couldn't mount pts" << std::endl;
                         return 1;
                     }
 
-                    if (mount("", (subsystem.path / "dev/shm").c_str(), "tmpfs", 0, 0) != 0) {
+                    if (!mountWrapper("", (subsystem.path / "dev/shm"), "tmpfs", 0, 0)) {
                         std::cout << "Couldn't mount shm" << std::endl;
                         return 1;
                     }
 
-                    if (mount("", (subsystem.path / "dev/mqueue").c_str(), "mqueue", 0, 0) != 0) {
+                    if (!mountWrapper("", (subsystem.path / "dev/mqueue"), "mqueue", 0, 0)) {
                         std::cout << "Couldn't mount mqueue" << std::endl;
                         return 1;
                     }
 
-                    if (mount("", (subsystem.path / "dev/hugepages").c_str(), "hugetlbfs", 0, 0) != 0) {
+                    if (!mountWrapper("", (subsystem.path / "dev/hugepages"), "hugetlbfs", 0, 0)) {
                         std::cout << "Couldn't mount hugepages" << std::endl;
                         return 1;
                     }
