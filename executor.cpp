@@ -27,20 +27,22 @@ int main (int argc, char** argv) {
     // Determine container and binary
     std::string container;
     std::string binary;
-    char ** args = nullptr;
+    std::vector<char*> args;
     if (ba::contains(argv[0], ":")) {
         std::vector<std::string> vec;
         ba::split(vec, argv[0], boost::is_any_of(":"));
         container = vec[0];
         binary = vec[1];
-        args = argv;
+        args = std::vector<char*>(argv, argv + argc);
         args[0] = strdup(binary.c_str());
     }
     else {
         container = argv[1];
         binary = argv[2];
-        args = argv + 2;
+        args = std::vector<char*>(argv + 2, argv + (argc - 2));
     }
+    args.push_back(NULL);
+
     fs::path containerPath = nsMntDir / container;
     if (!fs::exists(containerPath)) {
         std::cerr << "Container " << container << " seems not to be enabled." << std::endl;
@@ -134,5 +136,11 @@ int main (int argc, char** argv) {
     if (chdir(("/oldRoot" / cwd).c_str()) != 0) {
         std::cout << "Warning: Could not change working directory" << std::endl;
     }
-    execv(binary.c_str(), args);
+    boost::optional<std::string> interpreter = pt.get_optional<std::string>(container + ".interpreter");
+    if (envPath != boost::none) {
+        args.front() = strdup(binary.c_str());
+        args.insert(args.begin(), strdup(binary.c_str()));
+        binary = strdup("/oldRoot/usr/bin/qemu-aarch64-static");
+    }
+    execv(binary.c_str(), args.data());
 }

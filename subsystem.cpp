@@ -4,6 +4,7 @@
 
 #include <vector>
 #include <iostream>
+#include <optional>
 
 #define _GNU_SOURCE 1
 #include <cerrno>
@@ -27,12 +28,14 @@ namespace ba = boost::algorithm;
 class SubsystemConfig {
 public:
     SubsystemConfig(const std::string& name, const fs::path& path, const std::vector<std::pair<fs::path, fs::path>>& mntPoints,
-                    const std::vector<fs::path>& bins): name(name), path(path), mntPoints(mntPoints), bins(bins) {}
+                    const std::vector<fs::path>& bins, const std::optional<fs::path>& interpreter)
+        : name(name), path(path), mntPoints(mntPoints), bins(bins), interpreter(interpreter) {}
 
     std::string name;
     fs::path path;
     std::vector<std::pair<fs::path, fs::path>> mntPoints;
     std::vector<fs::path> bins;
+    std::optional<fs::path> interpreter;
 };
 
 /**
@@ -171,6 +174,7 @@ int main(int argc, char** argv) {
             fs::path path;
             std::vector<std::pair<fs::path, fs::path>> mntPoints;
             std::vector<fs::path> bins;
+            std::optional<fs::path> interpreter;
 
             // Mount /dev and /run by default
             mntPoints.emplace_back("/dev", "/dev");
@@ -205,9 +209,11 @@ int main(int argc, char** argv) {
                 } else if (option.first == "bins") {
                     std::string v = option.second.get_value<std::string>();
                     ba::split(bins, v, boost::is_any_of(";"));
+                } else if (option.first == "interpreter") {
+                    interpreter = option.second.get_value<std::string>();
                 }
             }
-            subsystems.emplace_back(name, path, mntPoints, bins);
+            subsystems.emplace_back(name, path, mntPoints, bins, interpreter);
         }
 
         // If start request --> mount namespace and appropriate mounts need to be performed.
@@ -226,6 +232,17 @@ int main(int argc, char** argv) {
 
             // Create mount namespace and perform mounts for each configured container
             for (auto &subsystem : subsystems) {
+
+                // Copy interpreter to new rootfs
+                if (subsystem.interpreter.value_or("") != "") {
+                    fs::path interpreter = subsystem.interpreter.value();
+                    fs::path target = subsystem.path.string() + (subsystem.bins.front() / interpreter.filename()).string();
+                    if (fs::exists(target)) {
+                        fs::remove(target);
+                    }
+
+                    fs::copy_file(interpreter, target);
+                }
 
                 // Perform the creation of the mount namespace and mounts in a child process to keep the
                 // main process within the current mount namespace
