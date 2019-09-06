@@ -1,6 +1,7 @@
 #include <boost/property_tree/ptree.hpp>
 #include <boost/property_tree/ini_parser.hpp>
 #include <boost/algorithm/string.hpp>
+#include <boost/format.hpp>
 
 #include <vector>
 #include <iostream>
@@ -81,12 +82,21 @@ inline bool createFile(const fs::path& path) {
     return true;
 }
 
+bool DEBUG;
+template <typename M>
+void debug(const M& m) {
+    if (DEBUG)
+        std::cout << "[DEBUG] " << m << std::endl;
+}
+
 /**
  * C++ wrapper for mount system call.
  * @return true if mount was successfull, false otherwise.
  */
 inline bool mountWrapper(const fs::path& source, const fs::path& target, const char* filesystemtype, unsigned long mountflags, const void* data) {
-    return mount(source.c_str(), target.c_str(), filesystemtype, mountflags, data) == 0;
+    auto ret = mount(source.c_str(), target.c_str(), filesystemtype, mountflags, data);
+    debug(boost::format("mount(%1%, %2%, ...) = %3%") % source % target % ret);
+    return ret == 0;
 }
 
 /**
@@ -126,11 +136,17 @@ enum Request : uint_fast8_t {
 };
 
 inline void usage(char* progName){
-    std::cout << "Usage: " << progName << " [start | stop | relink]" << std::endl;
+    std::cout << "Usage: " << progName << " [start | stop | relink] <--debug>\n";
+    std::cout << "\tstart: Start containers (setup namespaces and create symlinks)\n";
+    std::cout << "\tstop: Stop containers (reomve links and namespaces)\n";
+    std::cout << "\trelink: Recreate Symlinks (use only when already started)\n";
+    std::cout << "\n";
+    std::cout << "Options:\n";
+    std::cout << "\t--debug: Enable some debugging output\n";
 }
 
 int main(int argc, char** argv) {
-    if (argc == 1) {
+    if (argc != 2 && argc != 3) {
         usage(argv[0]);
         return 0;
     }
@@ -148,6 +164,10 @@ int main(int argc, char** argv) {
     else {
         usage(argv[0]);
         return 1;
+    }
+
+    if (argc == 3 && strcmp(argv[2], "--debug") == 0) {
+        DEBUG = true;
     }
 
     // Handle start or relink request
@@ -232,6 +252,9 @@ int main(int argc, char** argv) {
 
             // Create mount namespace and perform mounts for each configured container
             for (auto &subsystem : subsystems) {
+
+                debug("");
+                debug(subsystem.name);
 
                 // Copy interpreter to new rootfs
                 if (subsystem.interpreter.value_or("") != "") {

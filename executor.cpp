@@ -137,10 +137,11 @@ int main (int argc, char** argv) {
         std::cout << "Warning: Could not change working directory" << std::endl;
     }
     boost::optional<std::string> interpreter = pt.get_optional<std::string>(container + ".interpreter");
-    if (envPath != boost::none) {
+    if (interpreter != boost::none) {
         args.front() = strdup(binary.c_str());
         args.insert(args.begin(), strdup(binary.c_str()));
-        binary = strdup("/oldRoot/usr/bin/qemu-aarch64-static");
+        binary = "/oldRoot";
+        binary += *interpreter;
     }
     execv(binary.c_str(), args.data());
 }
