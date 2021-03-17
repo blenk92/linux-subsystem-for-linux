@@ -304,7 +304,6 @@ int main(int argc, char** argv) {
                         }
 
                         fs::path mntPoint = subsystem.path / tmpPath;
-                        fs::remove_all(mntPoint);
                         if (!fs::exists(mntPoint)) {
                             if (fs::is_directory(mnt.first)) {
                                 fs::create_directories(mntPoint);

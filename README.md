@@ -1,8 +1,10 @@
-# subsystem
+# Linux Subsystem for Linux (LSL)
 
-subsystem is a tooling that to convientently allow to run and maintain multiple root filesystems on a single linux machine. On the contrary to usual container such as Docker or LXC, subsystem does not isolate the different filesystems. Instead it only implements the abstraction that is neccessary to have multiple root filesystem. In particular, subsystems uses mount namespaces to  create containers for the additional root filesystem. These containers then have a differnt root filesystem than the host system. 
+Subsystem is a tool that I wrote a while ago because I needed to run specific application in specific versions. However, I wanted it to be easily callable from my host system, so non of the existing container solutions were sufficient to that (at least I couldn't find one). One of my favorite use-cases is to use a subsystem to install pen-testing utilities from one of the well known distributions that ship such tools without polluting my host system. The problem is, that most of the applications depend on shared libraries in specific version, so just copying the executable wasn't really an option because this would also require to handle the dependencies manually.
 
-To conviniently execute binaries of a subsystem, the host root filesystem is exended by links to a program that automatically changes into the appropriate mount namespace. The listing below shows how the program `id` can be executed:
+LSL conveniently allows to run and maintain multiple root filesystems on a single linux machine. On the contrary to usual container approaches such as Docker or LXC, LSL does not isolate the different filesystems (It has never be intended to provide additional security to you system). Instead it only implements the abstraction that is necessary to have multiple root filesystem. In particular, subsystems uses mount namespaces to create containers for the additional root filesystem. These containers then have a different root filesystem than the host system.
+
+To conveniently execute binaries of a subsystem, the host root filesystem is extended by links to a program that automatically changes into the appropriate mount namespace. The listing below shows how the program `id` can be executed:
 ```
 $ blackarch:id
 Executing /usr/bin/id in blackarch
@@ -30,19 +32,19 @@ Executing /usr/bin/pacman in blackarch
 ```
 
 ## Build Instructions & Binaries
-Subsystem can be built using the provided CMakeLists.txt. The build process generates two binaries 
+Subsystem can be built using the provided CMakeLists.txt. The build process generates two binaries
 
 * subsystem: Initializes the mount namespaces:
 	* To initialize the containers: `sudo subsystem start`
 	* To stop containers: `sudo subsystem stop`
-	* To recreate links (e.g. after installtion of additional binaries): `sudo subsystem relink`
+	* To recreate links (e.g. after installation of additional binaries): `sudo subsystem relink`
 * subsystemExecutor: Executes applications inside the contained (usually does not have to be  manually invoked)
 
-The subsystemExecutor binary is designed to be a root owned setuid binary. This is because in order to enter the mount namespaces of the container  requires the CAP_SYS_ADMIN capability. The subsystemExecutor wil, however, drop back to the crendentials of the user after the mount namespace has been entered.
+The subsystemExecutor binary is designed to be a root owned setuid binary. This is because in order to enter the mount namespaces of the container requires the CAP_SYS_ADMIN capability. The subsystemExecutor will, however, drop back to the crendentials of the user after the mount namespace has been entered.
 
 The CMakeLists.txt provides the following options to customize subsystem:
 
-* `MNTDIR` Specifies the directory that shall contain the file the mount namepsaces are bind mounted to. Default: /tmp/subsys
+* `MNTDIR` Specifies the directory that shall contain the file the mount namespaces are bind mounted to. Default: /tmp/subsys
 * `LINKSDIR`Specifies the directory (in the host system) that shall contain the links to the binaries in the containers. Default: /subsysbin
 * `CONFIGPATH` Specifies the path to the configuration file. Default: /etc/subsys.conf
 * `INSTALLDIR` Specifies the location the binaries shall be installed to. Default: /bin
@@ -66,6 +68,7 @@ path=<path to the new root directory>
 mnt=<;-separated list of files or directories to be mounted>
 bins=<;-separated list of files or directories that binaries are searched in>
 envPath=<new PATH environment variable (optional)>
+interpreter=<interperter for binaries, e.g. /usr/bin/qemu-aarch64-static. THIS A BETA FEATURE. YOU HAVE BEEN WARNED :-D>
 ```
 If the mountpoint within the container shall be different to the location in the root filesystem the new mount point can be specified by adding `:<new mount point>`  to the path, e.g. `/etc/file:/etc/other/file`
 
@@ -79,7 +82,7 @@ envPath=/usr/local/bin:/usr/bin:/bin:/usr/local/sbin:/usr/local/sbin:/usr/sbin:/
 
 [blackarch]
 path=/opt/subsystems/blackarch
-mnt=/etc/passwd;/etc/shadow;/etc/group;/etc/resolv.conf;/etc/sudoers;/home/;/proc/
+mnt=/etc/passwd;/etc/shadow;/etc/group;/etc/resolv.conf;/etc/sudoers;/home/
 bins=/usr/bin
 ```
 
@@ -124,7 +127,7 @@ $ sudo tar xvf rootfs.tar
 ```
 [arch]
 path=/opt/subsystems/arch
-mnt=/etc/passwd;/etc/shadow;/etc/group;/etc/resolv.conf;/etc/sudoers;/home/;/proc/
+mnt=/etc/passwd;/etc/shadow;/etc/group;/etc/resolv.conf;/etc/sudoers;/home/
 bins=/usr/bin
 ```
 
@@ -140,7 +143,27 @@ $ sudo arch:pacman -Sy && sudo arch:pacman -S <paket-name>
 $ sudo subsystem relink
 ```
 
-#### 5 Use application:
+#### 5 Use applications:
 ```
 $ arch:<binary-name> [args...]
 ```
+A major advantage is that you can use files of you hosts rootfs directly, for instance
+```
+# This happens in the host system
+$ touch ./123-test
+# Access to this file is pretty natural even with application of the subsystem:
+$ arch:ls -al ./123-test
+Executing /usr/bin/ls in arch
+
+-rw-r--r-- 1 someuser someuser 0 Mar 20 00:29 ./123-test
+```
+
+You can also get a shell in the subsystem by doing the following (assuming bash is installed there).
+```
+$ arch:bash
+```
+In that case the root of host system can be found at `/oldRoot`. Sometime its required to get a root shell to configure the container:
+```
+$ sudo arch:bash
+```
+If configured correctly, you should be able to even use sudo inside the container. Please note that this does however not work out of the box for most containers.
