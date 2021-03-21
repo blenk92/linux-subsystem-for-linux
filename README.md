@@ -174,3 +174,4 @@ If configured correctly, you should be able to even use sudo inside the containe
 
 ## Todos
  * Code needs some refactoring
+ * Fix DNS in qemu subsystems
