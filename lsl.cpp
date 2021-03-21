@@ -2,6 +2,7 @@
 #include <boost/property_tree/ini_parser.hpp>
 #include <boost/algorithm/string.hpp>
 #include <boost/format.hpp>
+#include <boost/program_options.hpp>
 
 #include <vector>
 #include <iostream>
@@ -17,6 +18,8 @@
 #include <wait.h>
 #include <unistd.h>
 #include <sys/syscall.h>
+#include <sys/prctl.h>
+#include <seccomp.h>
 
 #include "common.h"
 
@@ -135,19 +138,80 @@ enum Request : uint_fast8_t {
     STOP,
 };
 
-inline void usage(char* progName){
-    std::cout << "Usage: " << progName << " [start | stop | relink] <--debug>\n";
-    std::cout << "\tstart: Start containers (setup namespaces and create symlinks)\n";
-    std::cout << "\tstop: Stop containers (reomve links and namespaces)\n";
-    std::cout << "\trelink: Recreate Symlinks (use only when already started)\n";
+inline void usage(char* progName, const boost::program_options::options_description& desc){
+    std::cout << "Usage: " << progName << " <start | stop | relink> [options]\n\n";
+    std::cout << "Actions:\n";
+    std::cout << "  start: Start containers (setup namespaces and create symlinks)\n";
+    std::cout << "  stop: Stop containers (reomve links and namespaces)\n";
+    std::cout << "  relink: Recreate Symlinks (use only when already started)\n";
     std::cout << "\n";
-    std::cout << "Options:\n";
-    std::cout << "\t--debug: Enable some debugging output\n";
+    std::cout << desc;
+}
+
+class SeccompWrapper {
+public:
+    void init() {
+        ctx = seccomp_init(SCMP_ACT_KILL);
+        if (!ctx) {
+            throw std::runtime_error("Couldn't initialize seccomp context");
+        }
+    }
+
+    ~SeccompWrapper() {
+        seccomp_release(ctx);
+    }
+
+    void allowSyscall(int syscall) {
+        if (seccomp_rule_add(ctx, SCMP_ACT_ALLOW, syscall, 0) != 0) {
+            throw std::runtime_error("Couldn't add syscall number " + std::to_string(syscall) + " to seccomp context");
+        }
+    }
+
+    void loadFilter() {
+        if (seccomp_load(ctx) != 0) {
+            throw std::runtime_error("Couldn't load seccomp filter");
+        }
+    }
+private:
+    scmp_filter_ctx ctx;
+};
+
+void seccomp(const std::vector<int>& syscalls) {
+    if (prctl(PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0) == -1) {
+        throw std::runtime_error("Couldn't set no new privs");
+    }
+    SeccompWrapper ctx;
+    ctx.init();
+    for (auto syscall : syscalls) {
+        ctx.allowSyscall(syscall);
+    }
+    ctx.loadFilter();
 }
 
 int main(int argc, char** argv) {
-    if (argc != 2 && argc != 3) {
-        usage(argv[0]);
+    // CAP_SYS_ADMIN is required to create the namespace(s)
+    dropToCapabilities({CAP_SYS_ADMIN});
+    boost::program_options::options_description desc{"Options"};
+    desc.add_options()
+      ("help,h", "Help screen")
+      ("debug,d", "Enable debugging output")
+      ("disable-seccomp,s", "Disable seccomp filter");
+
+    if (argc < 2) {
+        usage(argv[0], desc);
+        return 0;
+    }
+
+    boost::program_options::command_line_parser parser{argc-1, argv+1};
+    parser.options(desc);
+    boost::program_options::parsed_options parsed_options = parser.run();
+
+    boost::program_options::variables_map vm;
+    boost::program_options::store(parsed_options, vm);
+    boost::program_options::notify(vm);
+
+    if (vm.count("help")) {
+        usage(argv[0], desc);
         return 0;
     }
 
@@ -162,12 +226,50 @@ int main(int argc, char** argv) {
         request = Request::STOP;
     }
     else {
-        usage(argv[0]);
+        usage(argv[0], desc);
         return 1;
     }
 
-    if (argc == 3 && strcmp(argv[2], "--debug") == 0) {
+    if (vm.count("debug")) {
         DEBUG = true;
+    } 
+    if (vm.count("disable-seccomp") == 0) {
+        seccomp({
+            SCMP_SYS(brk),
+            SCMP_SYS(clone),
+            SCMP_SYS(clone3),
+            SCMP_SYS(close),
+            SCMP_SYS(exit),
+            SCMP_SYS(exit_group),
+            SCMP_SYS(chmod),
+            SCMP_SYS(fchmod),
+            SCMP_SYS(fchmodat),
+            SCMP_SYS(getdents),
+            SCMP_SYS(getdents64),
+            SCMP_SYS(getppid),
+            SCMP_SYS(mkdir),
+            SCMP_SYS(mkdirat),
+            SCMP_SYS(mount),
+            SCMP_SYS(fstat),
+            SCMP_SYS(newfstatat),
+            SCMP_SYS(openat),
+            SCMP_SYS(open),
+            SCMP_SYS(pivot_root),
+            SCMP_SYS(read),
+            SCMP_SYS(readv),
+            SCMP_SYS(rmdir),
+            SCMP_SYS(sendfile),
+            SCMP_SYS(set_robust_list),
+            SCMP_SYS(symlink),
+            SCMP_SYS(symlinkat),
+            SCMP_SYS(umount2),
+            SCMP_SYS(unlink),
+            SCMP_SYS(unlinkat),
+            SCMP_SYS(unshare),
+            SCMP_SYS(wait4),
+            SCMP_SYS(write),
+            SCMP_SYS(writev),
+        });
     }
 
     // Handle start or relink request

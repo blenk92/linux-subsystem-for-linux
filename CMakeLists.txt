@@ -1,9 +1,9 @@
 cmake_minimum_required(VERSION 3.14)
-project(subsystem)
+project(lsl)
 
 set(CMAKE_CXX_STANDARD 17)
 
-FIND_PACKAGE( Boost 1.40 COMPONENTS system REQUIRED )
+FIND_PACKAGE( Boost 1.40 COMPONENTS system program_options REQUIRED )
 INCLUDE_DIRECTORIES( ${Boost_INCLUDE_DIR} )
 
 if ("${MNTDIR}" STREQUAL "")
@@ -17,7 +17,7 @@ endif()
 if ("${INSTALLDIR}" STREQUAL "")
     set(INSTALLDIR "/bin")
 endif()
-set(EXECUTORPATH "${INSTALLDIR}/subsystemExecutor")
+set(EXECUTORPATH "${INSTALLDIR}/lslExecutor")
 
 if ("${CONFIGPATH}" STREQUAL "")
     set(CONFIGPATH "/etc/subsys.conf")
@@ -26,16 +26,16 @@ endif()
 configure_file(common.h.in common.h @ONLY)
 include_directories(${CMAKE_CURRENT_BINARY_DIR})
 
-add_executable(subsystem subsystem.cpp)
-target_link_libraries(subsystem LINK_PUBLIC ${Boost_LIBRARIES} stdc++fs pthread)
-install(TARGETS subsystem
+add_executable(lsl lsl.cpp common.cpp)
+target_link_libraries(lsl LINK_PUBLIC ${Boost_LIBRARIES} stdc++fs pthread cap seccomp)
+install(TARGETS lsl
         PERMISSIONS OWNER_READ OWNER_WRITE OWNER_EXECUTE GROUP_READ GROUP_EXECUTE WORLD_READ WORLD_EXECUTE
         DESTINATION ${INSTALLDIR}
         )
 
-add_executable(subsystemExecutor executor.cpp)
-target_link_libraries(subsystemExecutor stdc++fs)
-install(TARGETS subsystemExecutor
+add_executable(lslExecutor executor.cpp common.cpp)
+target_link_libraries(lslExecutor stdc++fs cap)
+install(TARGETS lslExecutor
         PERMISSIONS OWNER_READ OWNER_WRITE OWNER_EXECUTE SETUID GROUP_READ GROUP_EXECUTE WORLD_READ WORLD_EXECUTE
         DESTINATION ${INSTALLDIR}
         )

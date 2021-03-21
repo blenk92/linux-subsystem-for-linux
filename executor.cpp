@@ -18,6 +18,9 @@ namespace ba = boost::algorithm;
 extern char** env;
 
 int main (int argc, char** argv) {
+    // CAP_SYS_CHROOT and CAP_SYS_ADMIN are needed to enter mount namespace
+    dropToCapabilities({CAP_SYS_CHROOT, CAP_SYS_ADMIN});
+
     if (!ba::contains(argv[0], ":") && argc < 3) {
         std::cout << "Usage: " << argv[0] << " container path-to-bin <args...>" << std::endl;
         std::cout << "Alternative: rename or link to ./container:bin <args...>" << std::endl;
@@ -49,18 +52,6 @@ int main (int argc, char** argv) {
         return 1;
     }
 
-    // Get current credentials to be able to drop back after entering the mount namespace
-    uid_t ruid, euid, suid;
-    if (getresuid(&ruid, &euid, &suid) != 0) {
-        std::cerr << "Couldn't get uids" << std::endl;
-        return 1;
-    }
-    gid_t rgid, egid, sgid;
-    if (getresgid(&rgid, &egid, &sgid) != 0) {
-        std::cerr << "Couldn't get gids" << std::endl;
-        return 1;
-    }
-
     // Parse config file before entering mount namespace
     bpt::ptree pt;
     bpt::ini_parser::read_ini(config, pt);
@@ -69,7 +60,7 @@ int main (int argc, char** argv) {
     fs::path cwd(cwd_cstr + 1);
     free(cwd_cstr);
 
-    // Enter mount namepsace of the container
+    // Enter mount namespace of the container
     int fd = open(containerPath.c_str(), O_RDONLY);
     if (fd == -1) {
         std::cerr << "Couldn't open namespace file" << std::endl;
@@ -81,16 +72,26 @@ int main (int argc, char** argv) {
     }
     close(fd);
 
+    // Get current credentials to be able to drop back after entering the mount namespace
+    uid_t ruid, euid, suid;
+    if (getresuid(&ruid, &euid, &suid) != 0) {
+        throw std::runtime_error("Couldn't get uids");
+    }
+    gid_t rgid, egid, sgid;
+    if (getresgid(&rgid, &egid, &sgid) != 0) {
+        throw std::runtime_error("Couldn't get gids");
+    }
+
     // Drop credentials to real gid and uid (because of setuid)
-    if (setresgid(rgid, rgid, rgid) != 0) {
+    // This also drops the capabilities if real uid is not root
+    if (setregid(rgid, rgid) != 0) {
         std::cerr << "Couldn't set gids" << std::endl;
         return 1;
     }
-    if (setresuid(ruid, ruid, ruid) != 0) {
+    if (setreuid(ruid, ruid) != 0) {
         std::cerr << "Couldn't set uids" << std::endl;
         return 1;
     }
-
 
     // Parse config file to get paths to search the binary in if the path is not an absolute path
     if (!ba::starts_with(binary, "/")) {

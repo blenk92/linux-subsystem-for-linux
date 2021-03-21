@@ -8,7 +8,11 @@
 #include <filesystem>
 namespace fs = std::filesystem;
 
-fs::path nsMntDir(MNTDIR);
-fs::path linksDir(LINKSDIR);
-fs::path executorPath(EXECUTORPATH);
-fs::path config(CONFIGPATH);
+extern fs::path nsMntDir;
+extern fs::path linksDir;
+extern fs::path executorPath;
+extern fs::path config;
+
+#include <sys/capability.h>
+#include <vector>
+void dropToCapabilities(const std::vector<cap_value_t>& cap_list);

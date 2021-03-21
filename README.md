@@ -34,15 +34,19 @@ Executing /usr/bin/pacman in blackarch
 ## Build Instructions & Binaries
 Subsystem can be built using the provided CMakeLists.txt. The build process generates two binaries
 
-* subsystem: Initializes the mount namespaces:
-	* To initialize the containers: `sudo subsystem start`
-	* To stop containers: `sudo subsystem stop`
-	* To recreate links (e.g. after installation of additional binaries): `sudo subsystem relink`
-* subsystemExecutor: Executes applications inside the contained (usually does not have to be  manually invoked)
+* lsl: Initializes the mount namespaces:
+	* To initialize the containers: `sudo lsl start`
+	* To stop containers: `sudo lsl stop`
+	* To recreate links (e.g. after installation of additional binaries): `sudo lsl relink`
+* lslExecutor: Executes applications inside the contained (usually does not have to be  manually invoked)
 
-The subsystemExecutor binary is designed to be a root owned setuid binary. This is because in order to enter the mount namespaces of the container requires the CAP_SYS_ADMIN capability. The subsystemExecutor will, however, drop back to the crendentials of the user after the mount namespace has been entered.
+### Security Considerations
+The lslExecutor application is designed to be a root owned setuid binary. This is a bit dangerous, but required because to enter the mount namespaces of the subsystem requires the CAP_SYS_ADMIN and CAP_SYS_CHROOT capabilities are required. Literally the first thing the lslExecutor does is dropping any other capabilities from the effective and permitted set (although CAP_SYS_ADMIN will probably be quite easy to escape...). lslExecutor will then drop back to the real user id (which is an unprivileged user if the user executing lslExecutor wasn't already root before) after the mount namespace of the subsystem has been entered. This will drop the remaining capabilities in case the real user id is not root. Alternatively you can add the required capabilties using file capabilties.
 
-The CMakeLists.txt provides the following options to customize subsystem:
+The lsl application on the other hand requires CAP_SYS_ADMIN to setup the mount namespace, all other capabilites will be dropped. In addition, a seccomp filter is applied by the application by default. This can be disabled by passing the --disable-seccomp option (which should however only be used in case of problems).
+### CMake
+
+The CMakeLists.txt provides the following options to customize lsl:
 
 * `MNTDIR` Specifies the directory that shall contain the file the mount namespaces are bind mounted to. Default: /tmp/subsys
 * `LINKSDIR`Specifies the directory (in the host system) that shall contain the links to the binaries in the containers. Default: /subsysbin
@@ -61,7 +65,7 @@ $ < add /subsysbin to  PATH environemnt variable>
 
 
 ## Configuration File
-The containers to be setup by subsystem are specified using a configuration file in the INI-format:
+The containers to be setup by lsl are specified using a configuration file in the INI-format:
 ```
 [container-name]
 path=<path to the new root directory>
@@ -167,3 +171,6 @@ In that case the root of host system can be found at `/oldRoot`. Sometime its re
 $ sudo arch:bash
 ```
 If configured correctly, you should be able to even use sudo inside the container. Please note that this does however not work out of the box for most containers.
+
+## Todos
+ * Code needs some refactoring
