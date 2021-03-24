@@ -2,7 +2,7 @@
 
 Subsystem is a tool that I wrote a while ago because I needed to run specific application in specific versions. However, I wanted it to be easily callable from my host system, so non of the existing container solutions were sufficient to that (at least I couldn't find one). One of my favorite use-cases is to use a subsystem to install pen-testing utilities from one of the well known distributions that ship such tools without polluting my host system. The problem is, that most of the applications depend on shared libraries in specific version, so just copying the executable wasn't really an option because this would also require to handle the dependencies manually.
 
-LSL conveniently allows to run and maintain multiple root filesystems on a single linux machine. On the contrary to usual container approaches such as Docker or LXC, LSL does not isolate the different filesystems (It has never be intended to provide additional security to you system). Instead it only implements the abstraction that is necessary to have multiple root filesystem. In particular, subsystems uses mount namespaces to create containers for the additional root filesystem. These containers then have a different root filesystem than the host system.
+LSL conveniently allows to run and maintain multiple root filesystems on a single linux machine. On the contrary to usual container approaches such as Docker or LXC, LSL does not isolate the different filesystems (It has never be intended to provide additional security to your system). Instead it only implements the abstraction that is necessary to have multiple root filesystems. In particular, subsystems uses mount namespaces to create containers for the additional root filesystem. These containers then have a different root filesystem than the host system.
 
 To conveniently execute binaries of a subsystem, the host root filesystem is extended by links to a program that automatically changes into the appropriate mount namespace. The listing below shows how the program `id` can be executed:
 ```
@@ -17,7 +17,7 @@ Executing /usr/bin/id in blackarch
 uid=0(root) gid=0(root) groups=0(root)
 ```
 
-To install packets from the packet repository, one can execute a bash within the container or call the packet manger directly:
+To install packets from the packet repository, one can execute a bash within the container or call the packet manager directly:
 ```
 $sudo blackarch:bash
 Executing /usr/bin/bash in blackarch
@@ -41,7 +41,7 @@ Subsystem can be built using the provided CMakeLists.txt. The build process gene
 * lslExecutor: Executes applications inside the contained (usually does not have to be  manually invoked)
 
 ### Security Considerations
-The lslExecutor application is designed to be a root owned setuid binary. This is a bit dangerous, but required because to enter the mount namespaces of the subsystem requires the CAP_SYS_ADMIN and CAP_SYS_CHROOT capabilities are required. Literally the first thing the lslExecutor does is dropping any other capabilities from the effective and permitted set (although CAP_SYS_ADMIN will probably be quite easy to escape...). lslExecutor will then drop back to the real user id (which is an unprivileged user if the user executing lslExecutor wasn't already root before) after the mount namespace of the subsystem has been entered. This will drop the remaining capabilities in case the real user id is not root. Alternatively you can add the required capabilties using file capabilties.
+The lslExecutor application is designed to be a root owned setuid binary. This is a bit dangerous, but required because to enter the mount namespaces of the subsystem the CAP_SYS_ADMIN and CAP_SYS_CHROOT capabilities are required. Literally the first thing the lslExecutor does is dropping any other capabilities from the effective and permitted set (although CAP_SYS_ADMIN will probably be quite easy to escape...). lslExecutor will then drop back to the real user id (which is an unprivileged user if the user executing lslExecutor wasn't already root before) after the mount namespace of the subsystem has been entered. This will drop the remaining capabilities in case the real user id is not root. Alternatively you can add the required capabilties using file capabilties.
 
 The lsl application on the other hand requires CAP_SYS_ADMIN to setup the mount namespace, all other capabilites will be dropped. In addition, a seccomp filter is applied by the application by default. This can be disabled by passing the --disable-seccomp option (which should however only be used in case of problems).
 ### CMake
