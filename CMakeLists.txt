@@ -23,6 +23,8 @@ if ("${CONFIGPATH}" STREQUAL "")
     set(CONFIGPATH "/etc/subsys.conf")
 endif()
 
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -D_FORTIFY_SOURCE=2 -O3 -Wl,-z,relro,-z,now")
+
 configure_file(common.h.in common.h @ONLY)
 include_directories(${CMAKE_CURRENT_BINARY_DIR})
 
