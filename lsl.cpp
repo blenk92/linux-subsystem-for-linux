@@ -245,6 +245,7 @@ int main(int argc, char **argv) {
             SCMP_SYS(chmod),
             SCMP_SYS(fchmod),
             SCMP_SYS(fchmodat),
+            SCMP_SYS(fcntl),
             SCMP_SYS(getdents),
             SCMP_SYS(getdents64),
             SCMP_SYS(getppid),
