@@ -8,7 +8,7 @@ fs::path executorPath(EXECUTORPATH);
 fs::path config(CONFIGPATH);
 
 class CapWrapper {
-public:
+  public:
     ~CapWrapper() {
         if (caps) {
             cap_free(caps);
@@ -17,12 +17,14 @@ public:
     void init() {
         caps = cap_init();
         if (!caps) {
-            throw std::runtime_error("Couldn't initialize capabilities context");
+            throw std::runtime_error(
+                "Couldn't initialize capabilities context");
         }
     }
 
-    void allowCaps(const std::vector<cap_value_t>& capList, cap_flag_t set) {
-        if (cap_set_flag(caps, set, capList.size(), capList.data(), CAP_SET) == -1) {
+    void allowCaps(const std::vector<cap_value_t> &capList, cap_flag_t set) {
+        if (cap_set_flag(caps, set, capList.size(), capList.data(), CAP_SET) ==
+            -1) {
             throw std::runtime_error("Couldn't set capabiliets on context");
         }
     }
@@ -32,11 +34,12 @@ public:
             throw std::runtime_error("Couldn't drop capabilities");
         }
     }
-private:
+
+  private:
     cap_t caps;
 };
 
-void dropToCapabilities(const std::vector<cap_value_t>& capList) {
+void dropToCapabilities(const std::vector<cap_value_t> &capList) {
     CapWrapper cw;
     cw.init();
 
@@ -45,4 +48,3 @@ void dropToCapabilities(const std::vector<cap_value_t>& capList) {
 
     cw.enableCaps();
 }
-

@@ -15,4 +15,4 @@ extern fs::path config;
 
 #include <sys/capability.h>
 #include <vector>
-void dropToCapabilities(const std::vector<cap_value_t>& cap_list);
+void dropToCapabilities(const std::vector<cap_value_t> &cap_list);
