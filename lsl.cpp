@@ -7,6 +7,7 @@
 #include <iostream>
 #include <optional>
 #include <vector>
+#include <mutex>
 
 #define _GNU_SOURCE 1
 #include <cerrno>
@@ -44,27 +45,6 @@ class SubsystemConfig {
     std::vector<fs::path> bins;
     std::optional<fs::path> interpreter;
 };
-
-/**
- * Wrapper around C mutexes
- */
-class MutexWrapper {
-    mtx_t mtx;
-
-  public:
-    MutexWrapper() { mtx_init(&mtx, mtx_plain); }
-
-    ~MutexWrapper() { mtx_destroy(&mtx); }
-
-    void lock() { mtx_lock(&mtx); }
-
-    void unlock() { mtx_unlock(&mtx); }
-};
-
-/**
- * Mutex to synchronize creationg and mounting of the mount namespace
- */
-MutexWrapper mtx;
 
 /**
  * Create a file at the given location.
@@ -107,14 +87,14 @@ inline bool mountWrapper(const fs::path &source, const fs::path &target,
  * @return 0 if the mount namespace has successfully been mounted, 1 otherwise
  */
 int childBindMountNamespace(void *data) {
-    std::string *container = reinterpret_cast<std::string *>(data);
-    fs::path nsMntPath = nsMntDir / *container;
+    auto pair = reinterpret_cast<std::pair<std::string, std::mutex*>*>(data);
+    fs::path nsMntPath = nsMntDir / pair->first;
 
     // Create file to mount ot if not already existing
     if (!fs::exists(nsMntPath)) {
         if (!createFile(nsMntPath)) {
             std::cout << "Couldn't create mount file " << nsMntPath
-                      << " for namespace of " << *container << std::endl;
+                      << " for namespace of " << pair->first << std::endl;
             return 1;
         }
     }
@@ -122,13 +102,14 @@ int childBindMountNamespace(void *data) {
     fs::path mntNs = fs::path("/proc/") / std::to_string(getppid()) / "ns/mnt";
 
     // Wait until mount namespace is entered by parent
-    mtx.lock();
-    if (!mountWrapper(mntNs, nsMntPath, 0, MS_BIND, 0)) {
-        std::cerr << "Couldn't create bind mount for mount namespace of "
-                  << *container << ": " << strerror(errno) << std::endl;
-        return 1;
+    {
+        const std::lock_guard<std::mutex> lock(*(pair->second));
+        if (!mountWrapper(mntNs, nsMntPath, 0, MS_BIND, 0)) {
+            std::cerr << "Couldn't create bind mount for mount namespace of "
+                    << pair->first << ": " << strerror(errno) << std::endl;
+            return 1;
+        }
     }
-    mtx.unlock();
     return 0;
 }
 
@@ -392,21 +373,23 @@ int main(int argc, char **argv) {
                 if (child == 0) {
                     // Create mount namespace and bind mount it to keep it alive
                     // after the child exits.
-                    char *stk = new char[4096];
-                    mtx.lock();
-                    // Use clone directly to create a child process with
-                    // different pid but same virtual memory
-                    clone(childBindMountNamespace, stk + 4096,
-                          CLONE_VM | SIGCHLD, &(subsystem.name));
-                    if (unshare(CLONE_NEWNS) != 0) {
-                        std::cerr << "Couldn't create mount namespace: "
-                                  << strerror(errno) << ". Exiting..."
-                                  << std::endl;
-                        return 1;
+                    char *stk = new char[1024*1024];
+                    {
+                        std::mutex mtx;
+                        const std::lock_guard<std::mutex> lock(mtx);
+                        auto data = std::make_pair(subsystem.name, &mtx);
+                        // Use clone directly to create a child process with
+                        // different pid but same virtual memory
+                        clone(childBindMountNamespace, stk + 1024*1024,
+                              CLONE_VM | CLONE_CHILD_CLEARTID | SIGCHLD, &(data));
+                        if (unshare(CLONE_NEWNS) != 0) {
+                            std::cerr << "Couldn't create mount namespace: "
+                                      << strerror(errno) << ". Exiting..."
+                                      << std::endl;
+                            return 1;
+                        }
                     }
-                    mtx.unlock();
                     wait(NULL);
-                    delete[] stk;
 
                     // Configure all mount points of the new mount namespace as
                     // slaves to not propagate the following mounts
